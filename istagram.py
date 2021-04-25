@@ -8,6 +8,7 @@
 # Скачать изображения всех постов и сохранить на диск
 import scrapy
 import json
+from urllib.parse import urlencode
 
 
 class InstagramSpider(scrapy.Spider):
@@ -37,37 +38,49 @@ class InstagramSpider(scrapy.Spider):
                 },
                 headers={'x-csrftoken': js_data['config']['csrf_token']}
             )
+            print(1)
         except AttributeError:
             if response.json()['authenticated']:
+                print('authenticated confirmed')
                 for tag in self.tags:
                     yield response.follow(f'{self._tags_path}{tag}/', callback=self.tag_page_parse)
 
     def tag_page_parse(self, response):
         try:
             parse_data = self.get_parse_data(response)
+            # id_ = urlencode(parse_data['next_max_id'])
             yield scrapy.FormRequest(
                 f'{self._pagination_path}{parse_data["name"]}/sections/',
                 method='POST',
                 callback=self.tag_page_parse,
                 formdata={
                     'include_persistent': '0',
-                    'max_id': parse_data['next_max_id'],
-                    'page': f'{parse_data["next_page"]}',
+                    'max_id': parse_data['next_max_id'][:-2] + '%3D%3D',
+                    'page': f'{parse_data["next_page"] + 1}',
                     'surface': 'grid',
                     'tab': 'recent'
                 },
-                headers={'x-csrftoken': parse_data['x-csrftoken']}
+                headers={
+                    'x-csrftoken': parse_data['x-csrftoken'],
+                    'x-ig-app-id': parse_data['id'],
+                    ':authority': 'i.instagram.com',
+                    ':path': '/api/v1/tags/travel/sections/',
+                    ':scheme': 'https',
+                    'x-ig-www-claim': 'hmac.AR3zA1yi3bm0HrLF0bP6OeMpmzYBqwyZABbMyOAb2MP94NS7',
+                    'x-instagram-ajax': '822bad258fea'
+
+                }
             )
-        except AttributeError:
-            if response.json()['status'] == 'fail':
-                print(1)
+        except KeyError:
+            print('pagination')
+            # self.parse(response)
 
     def tag_parse(self, response):
-        print(2)
+        print('tag_parse')
 
     def get_parse_data(self, response):
         js_data = self.js_extract(response)
-        print(1)
+        print('get_parse_data')
         return {
             'next_max_id': js_data['entry_data']['TagPage'][0]['data']['recent']['next_max_id'],
             'id': js_data['entry_data']['TagPage'][0]['data']['id'],
